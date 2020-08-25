@@ -1,0 +1,123 @@
+---
+title: "Practical Machine Learning Project"
+author: "Meet Bhavesh Shah"
+date: "24/08/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Background
+
+<p>Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. </p>
+
+## Loading Libraries
+
+```{r,echo=FALSE}
+set.seed(47)
+```
+
+```{r,results='hide'}
+library(caret)
+library(ggplot2)
+library(rpart)
+library(yardstick)
+library(randomForest)
+```
+
+## Loading the dataset
+```{r}
+training <- read.csv("pml-training.csv")
+```
+<p>Understanding the dataset</p>
+```{r}
+training[1,]
+```
+
+<p>Many columns have a lot of missing data.Here we get the indexes of the columns having at least 50% of NA or blank values on the training dataset and we remove those columns.</p>
+
+```{r}
+remove <- which(colSums(is.na(training) |training=="")>0.5*dim(training)[1]) 
+trainingClean <- training[,-remove]
+dim(trainingClean)
+trainingClean[1,]
+```
+
+### We have 60 columns remaining.
+
+<p>columns X,user_name,relating to timestamps and relating to window do not give any information that might help the model in predicting, so we will remove those columns.</p>
+
+```{r}
+trainingClean <- trainingClean[,-c(1:7)]
+dim(trainingClean)
+trainingClean[1,]
+```
+
+### Finally we are left with 53 columns.
+
+## Spliting train data and cross validation data
+<p>Here we are splitting the dataset,with 80% of it going into the training set and rest in cross validation set</p>
+```{r}
+inTrain <- createDataPartition(trainingClean$classe,p=0.8,list=F)
+trainData <- trainingClean[inTrain,]
+cvalidData <- trainingClean[-inTrain,]
+```
+
+## Fitting the model.
+<p>I tested logistic classification,svm and random forests for their accuracy on the dataset.Out of all of them ,random forest seem to give very good accuracy.</p>
+```{r}
+modFit <- randomForest(classe ~ .,trainData)
+```
+
+## Metrics according to class.
+
+```{r}
+confusionMatrix(trainData$classe,predict(modFit,newdata = trainData))$byClass
+```
+<p> We get very good values for every metric.</p>
+
+## Error Rates.
+
+### Let us check in sample error rate
+```{r}
+confusionMatrix(trainData$classe,predict(modFit,newdata = trainData))$overall
+```
+
+```{r,echo=FALSE}
+pred <- predict(modFit,newdata = trainData)
+truth_predicted <- data.frame(
+obs=trainData$classe,
+pred=pred)
+cm <- conf_mat(truth_predicted, obs, pred)
+autoplot(cm, type = "heatmap") +
+scale_fill_gradient(low="#e4f9f5",high = "#30e3ca")+theme(legend.position="right")+ggtitle("Confusion matrix(in-sample)")
+```
+<p>We get high accuracy.Checking out of sample error rate will help us determine whther our data is overfitting or not.</p>
+
+### Let us check out of sample error rate
+
+```{r}
+confusionMatrix(cvalidData$classe,predict(modFit,newdata = cvalidData))$overall
+```
+
+```{r,echo=FALSE}
+pred <- predict(modFit,newdata = cvalidData)
+truth_predicted <- data.frame(
+obs=cvalidData$classe,
+pred=pred)
+cm <- conf_mat(truth_predicted, obs, pred)
+autoplot(cm, type = "heatmap") +
+scale_fill_gradient(low="#e4f9f5",high = "#30e3ca")+theme(legend.position="right")+ggtitle("Confusion matrix(out-of-sample)")
+```
+<p>We get high accuracy for the test set also.So our model is fitting the data very good and **not overfitting** it</p>
+
+## Summary
+We get a 100% accuracy on the train test and 99.64% accuracy on the cross validation set.The crossvalidation set was not used for training and hence can be used to determine out of sample error rate.
+
+### Testing
+```{r}
+testing<- read.csv("pml-testing.csv")
+testingClean <- testing[,colnames(trainingClean)[-53]]
+predict(modFit,testingClean)
+```
